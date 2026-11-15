@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#FFCB05">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <title>PokéScan</title>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f1a;
+      --surface: #1a1a2e;
+      --surface2: #242442;
+      --yellow: #FFCB05;
+      --yellow-dark: #d4a800;
+      --blue: #3B4CCA;
+      --green: #22c55e;
+      --red: #ef4444;
+      --text: #ffffff;
+      --muted: #8888aa;
+      --radius: 14px;
+      --gap: 20px;
+    }
+
+    html, body {
+      min-height: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ═══════════════════════════════════════
+       LAYOUT — mobile first → tablet → desktop
+    ═══════════════════════════════════════ */
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 0 0 env(safe-area-inset-bottom);
+    }
+
+    /* Tablet / Desktop : panneau latéral + contenu côte à côte */
+    @media (min-width: 768px) {
+      body { padding: 24px; }
+      .app {
+        max-width: 1100px;
+        min-height: calc(100vh - 48px);
+        flex-direction: row;
+        gap: var(--gap);
+        align-items: flex-start;
+        border-radius: 20px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .sidebar {
+        width: 220px;
+        min-width: 220px;
+        background: var(--bg);
+        border-radius: 20px;
+        padding: 24px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        position: sticky;
+        top: 0;
+        min-height: calc(100vh - 48px);
+      }
+      .mobile-header { display: none; }
+      .mobile-nav { display: none; }
+      .view { padding: 24px; border-radius: 0; }
+      .view.active { display: flex; }
+    }
+
+    @media (max-width: 767px) {
+      .sidebar { display: none; }
+    }
+
+    /* ── Mobile header & nav ── */
+    .mobile-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 0;
+      flex-shrink: 0;
+    }
+    .logo {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--yellow);
+      letter-spacing: -0.5px;
+    }
+    .mobile-nav {
+      display: flex;
+      gap: 4px;
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 4px;
+      margin: 14px 20px 0;
+      flex-shrink: 0;
+    }
+
+    /* ── Sidebar nav (tablet/desktop) ── */
+    .sidebar .logo {
+      font-size: 20px;
+      margin-bottom: 20px;
+      display: block;
+    }
+    .sidebar-tab {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: all .18s;
+    }
+    .sidebar-tab.active {
+      background: var(--yellow);
+      color: #000;
+    }
+    .sidebar-tab:not(.active):hover { background: var(--surface2); color: var(--text); }
+
+    /* ── Shared tab style (mobile) ── */
+    .tab {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .18s;
+    }
+    .tab.active { background: var(--yellow); color: #000; }
+
+    /* ── Views ── */
+    .view {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      flex-direction: column;
+    }
+    .view.active { display: flex; }
+
+    /* ════════════════════════════════
+       SCANNER
+    ════════════════════════════════ */
+
+    .steps {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .step-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--surface2);
+      transition: background .2s;
+    }
+    .step-dot.done { background: var(--yellow); }
+    .step-dot.active { background: var(--yellow); box-shadow: 0 0 0 3px rgba(255,203,5,.25); }
+
+    .photo-slots {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    /* Larger slots on wide screens */
+    @media (min-width: 768px) {
+      .photo-slots { gap: 20px; margin-bottom: 32px; }
+    }
+
+    .photo-slot {
+      aspect-ratio: 2/3;
+      border-radius: var(--radius);
+      border: 2px dashed var(--surface2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color .2s, transform .1s;
+    }
+    .photo-slot:active { transform: scale(.98); }
+    .photo-slot.active-slot { border-color: var(--yellow); border-style: solid; }
+    .photo-slot.done-slot { border-color: var(--green); border-style: solid; }
+    .photo-slot img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .slot-icon { font-size: 32px; }
+    .slot-label { text-align: center; line-height: 1.3; }
+    .retake {
+      position: absolute; bottom: 8px; right: 8px;
+      background: rgba(0,0,0,.7);
+      border: none; color: #fff;
+      border-radius: 20px; padding: 4px 10px;
+      font-size: 12px; cursor: pointer;
+      display: none;
+    }
+    .photo-slot.done-slot .retake { display: block; }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .18s;
+    }
+    .btn:disabled { opacity: .4; cursor: default; }
+    .btn-primary { background: var(--yellow); color: #000; }
+    .btn-primary:not(:disabled):active { background: var(--yellow-dark); transform: scale(.98); }
+    .btn-ghost { background: var(--surface2); color: var(--text); margin-top: 10px; }
+
+    @media (min-width: 768px) {
+      .btn { max-width: 420px; }
+    }
+
+    .step-label {
+      text-align: center;
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .step-hint {
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    /* Loader */
+    #loader { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 20px; flex: 1; min-height: 200px; }
+    #loader.visible { display: flex; }
+    .spinner {
+      width: 52px; height: 52px;
+      border: 4px solid var(--surface2);
+      border-top-color: var(--yellow);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text { color: var(--muted); font-size: 15px; }
+
+    /* Result */
+    #result { display: none; }
+    #result.visible { display: flex; flex-direction: column; gap: 14px; }
+
+    .result-card {
+      background: var(--surface2);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .result-card { background: var(--bg); }
+    }
+
+    .result-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+    .badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .badge-real    { background: rgba(34,197,94,.2);  color: var(--green); }
+    .badge-fake    { background: rgba(239,68,68,.2);  color: var(--red); }
+    .badge-common        { background: #333; color: #aaa; }
+    .badge-uncommon      { background: rgba(34,197,94,.15); color: #4ade80; }
+    .badge-rare          { background: rgba(59,76,202,.2);  color: #818cf8; }
+    .badge-rare_holo     { background: rgba(167,139,250,.15); color: #a78bfa; }
+    .badge-ultra_rare    { background: rgba(251,146,60,.15); color: #fb923c; }
+    .badge-secret_rare   { background: rgba(239,68,68,.15);  color: #f87171; }
+    .badge-promo         { background: rgba(120,113,108,.2); color: #a8a29e; }
+
+    .result-name { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .result-set  { font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+
+    .price-main { font-size: 28px; font-weight: 800; color: var(--yellow); }
+    .price-sub  { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .price-na   { font-size: 15px; color: var(--muted); font-style: italic; }
+
+    .result-auth {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--surface2);
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .fake-indicators { list-style: none; margin-top: 8px; }
+    .fake-indicators li::before { content: '⚠ '; color: var(--red); }
+
+    .result-saved { text-align: center; font-size: 13px; color: var(--green); font-weight: 600; }
+
+    /* ════════════════════════════════
+       COLLECTION
+    ════════════════════════════════ */
+
+    .collection-summary {
+      background: var(--surface2);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    @media (min-width: 768px) {
+      .collection-summary { background: var(--bg); }
+    }
+
+    .summary-label { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+    .summary-count { font-size: 20px; font-weight: 800; }
+    .summary-value { text-align: right; }
+    .summary-total { font-size: 22px; font-weight: 800; color: var(--yellow); }
+
+    /* Grid on wide screens */
+    .collection-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    @media (min-width: 1024px) {
+      .collection-list {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+    }
+
+    .card-item {
+      background: var(--surface2);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    @media (min-width: 768px) {
+      .card-item { background: var(--bg); }
+    }
+
+    .card-info { flex: 1; min-width: 0; }
+    .card-name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .card-badges { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .card-price-col {
+      text-align: right;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+    .card-price-val { font-size: 18px; font-weight: 800; color: var(--yellow); }
+    .card-price-na  { font-size: 13px; color: var(--muted); }
+    .card-delete {
+      background: none; border: none;
+      color: var(--muted); font-size: 20px;
+      cursor: pointer; padding: 4px;
+      margin-top: 6px; line-height: 1;
+      transition: color .15s;
+    }
+    .card-delete:hover { color: var(--red); }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--muted);
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .empty-icon { font-size: 56px; }
+    .empty-text { font-size: 15px; line-height: 1.6; }
+
+    input[type=file] { display: none; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Sidebar (tablet/desktop) ── -->
+  <aside class="sidebar">
+    <span class="logo">⚡ PokéScan</span>
+    <button class="sidebar-tab active" id="sidebar-scanner" onclick="switchTab('scanner')">📷 Scanner</button>
+    <button class="sidebar-tab" id="sidebar-collection" onclick="switchTab('collection')">📦 Collection</button>
+  </aside>
+
+  <!-- ── Mobile header + nav ── -->
+  <header class="mobile-header">
+    <div class="logo">⚡ PokéScan</div>
+  </header>
+
+  <!-- (injected after header via JS on mobile) -->
+
+  <!-- ── Scanner view ── -->
+  <main class="view active" id="view-scanner">
+    <div class="steps">
+      <div class="step-dot active" id="dot-recto"></div>
+      <div class="step-dot" id="dot-verso"></div>
+      <div class="step-dot" id="dot-analyze"></div>
+    </div>
+
+    <div class="step-label" id="step-label">Photographier le recto</div>
+    <div class="step-hint" id="step-hint">Face avant de la carte, bien éclairée</div>
+
+    <div class="photo-slots">
+      <div class="photo-slot active-slot" id="slot-recto" onclick="triggerCapture('recto')">
+        <span class="slot-icon">🃏</span>
+        <span class="slot-label">Recto</span>
+        <button class="retake" onclick="event.stopPropagation(); triggerCapture('recto')">↺ Reprendre</button>
+      </div>
+      <div class="photo-slot" id="slot-verso" onclick="triggerCapture('verso')">
+        <span class="slot-icon">🔵</span>
+        <span class="slot-label">Verso</span>
+        <button class="retake" onclick="event.stopPropagation(); triggerCapture('verso')">↺ Reprendre</button>
+      </div>
+    </div>
+
+    <div id="scan-actions">
+      <button class="btn btn-primary" id="btn-analyze" disabled onclick="analyze()">🔍 Analyser la carte</button>
+      <button class="btn btn-ghost" onclick="resetScan()">↺ Recommencer</button>
+    </div>
+
+    <div id="loader">
+      <div class="spinner"></div>
+      <div class="loader-text">Analyse en cours…</div>
+    </div>
+
+    <div id="result">
+      <div class="result-card" id="result-content"></div>
+      <div class="result-saved">✓ Ajoutée à la collection</div>
+      <button class="btn btn-primary" onclick="resetScan()">📷 Scanner une autre carte</button>
+    </div>
+  </main>
+
+  <!-- ── Collection view ── -->
+  <main class="view" id="view-collection">
+    <div id="collection-content"></div>
+  </main>
+
+</div>
+
+<input type="file" id="input-recto" accept="image/*" capture="environment">
+<input type="file" id="input-verso" accept="image/*" capture="environment">
+
+<script>
+  // ── Mobile nav injection ───────────────────────────────
+  if (window.innerWidth < 768) {
+    const nav = document.createElement('nav');
+    nav.className = 'mobile-nav';
+    nav.innerHTML = `
+      <button class="tab active" id="mob-scanner" onclick="switchTab('scanner')">📷 Scanner</button>
+      <button class="tab" id="mob-collection" onclick="switchTab('collection')">📦 Collection</button>`;
+    document.querySelector('.mobile-header').after(nav);
+  }
+
+  // ── Tab switching ──────────────────────────────────────
+  function switchTab(tab) {
+    // Mobile tabs
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+
+    const mobBtn = document.getElementById(`mob-${tab}`);
+    if (mobBtn) mobBtn.classList.add('active');
+    const sideBtn = document.getElementById(`sidebar-${tab}`);
+    if (sideBtn) sideBtn.classList.add('active');
+
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(`view-${tab}`).classList.add('active');
+
+    if (tab === 'collection') renderCollection();
+  }
+
+  // ── State ──────────────────────────────────────────────
+  const state = { rectoB64: null, versoB64: null };
+
+  // ── Camera capture ─────────────────────────────────────
+  function triggerCapture(side) {
+    document.getElementById(`input-${side}`).click();
+  }
+
+  async function compressImage(file) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const MAX = 1024;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.78).split(',')[1]);
+      };
+      img.src = url;
+    });
+  }
+
+  document.getElementById('input-recto').addEventListener('change', async (e) => {
+    if (!e.target.files[0]) return;
+    state.rectoB64 = await compressImage(e.target.files[0]);
+    showPreview('recto', e.target.files[0]);
+    e.target.value = '';
+    updateScanState();
+  });
+
+  document.getElementById('input-verso').addEventListener('change', async (e) => {
+    if (!e.target.files[0]) return;
+    state.versoB64 = await compressImage(e.target.files[0]);
+    showPreview('verso', e.target.files[0]);
+    e.target.value = '';
+    updateScanState();
+  });
+
+  function showPreview(side, file) {
+    const slot = document.getElementById(`slot-${side}`);
+    slot.querySelector('img')?.remove();
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    slot.prepend(img);
+    slot.classList.remove('active-slot');
+    slot.classList.add('done-slot');
+  }
+
+  function updateScanState() {
+    const hasRecto = !!state.rectoB64;
+    const hasVerso = !!state.versoB64;
+
+    document.getElementById('dot-recto').className  = 'step-dot ' + (hasRecto ? 'done' : 'active');
+    document.getElementById('dot-verso').className  = 'step-dot ' + (hasVerso ? 'done' : hasRecto ? 'active' : '');
+    document.getElementById('dot-analyze').className = 'step-dot ' + (hasRecto && hasVerso ? 'active' : '');
+
+    document.getElementById('slot-verso').classList.toggle('active-slot', hasRecto && !hasVerso);
+
+    const label = document.getElementById('step-label');
+    const hint  = document.getElementById('step-hint');
+    if (!hasRecto) {
+      label.textContent = 'Photographier le recto';
+      hint.textContent  = 'Face avant de la carte, bien éclairée';
+    } else if (!hasVerso) {
+      label.textContent = 'Photographier le verso';
+      hint.textContent  = 'Dos de la carte — crucial pour détecter les fakes';
+    } else {
+      label.textContent = 'Prêt à analyser';
+      hint.textContent  = 'Les deux faces sont capturées ✓';
+    }
+
+    document.getElementById('btn-analyze').disabled = !(hasRecto && hasVerso);
+  }
+
+  // ── Analysis ──────────────────────────────────────────
+  async function analyze() {
+    document.getElementById('scan-actions').style.display = 'none';
+    document.getElementById('loader').classList.add('visible');
+    document.getElementById('result').classList.remove('visible');
+
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recto: state.rectoB64, verso: state.versoB64 })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const card = await res.json();
+      saveCard(card);
+      showResult(card);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      document.getElementById('loader').classList.remove('visible');
+    }
+  }
+
+  function showResult(card) {
+    const p = card.price;
+    const priceHTML = p?.avg_sell
+      ? `<div style="margin-top:4px">
+           <div class="price-main">${fmt(p.avg_sell)}</div>
+           <div class="price-sub">Tendance ${fmt(p.trend)} · Min ${fmt(p.low)} · Moy. 30j ${fmt(p.avg30)}</div>
+         </div>`
+      : `<div class="price-na" style="margin-top:4px">Prix non disponible sur cardmarket</div>`;
+
+    const fakeHTML = !card.is_real && card.fake_indicators?.length
+      ? `<ul class="fake-indicators">${card.fake_indicators.map(f => `<li>${f}</li>`).join('')}</ul>`
+      : '';
+
+    document.getElementById('result-content').innerHTML = `
+      <div class="result-badges">
+        <span class="badge ${card.is_real ? 'badge-real' : 'badge-fake'}">
+          ${card.is_real ? '✓ Vraie' : '✗ Fausse'} · ${
+            card.authenticity_confidence === 'high' ? 'Certitude haute'
+            : card.authenticity_confidence === 'medium' ? 'Certitude moyenne'
+            : 'Certitude faible'}
+        </span>
+        <span class="badge badge-${card.rarity || 'common'}">${card.rarity_fr || 'Inconnue'}</span>
+      </div>
+      <div class="result-name">${card.name_fr || card.name_en || '?'}</div>
+      <div class="result-set">${card.set_name || ''} · ${card.card_number || ''} · Illus. ${card.artist || '?'}</div>
+      ${priceHTML}
+      ${card.authenticity_notes
+        ? `<div class="result-auth">${card.authenticity_notes}${fakeHTML}</div>`
+        : ''}`;
+
+    document.getElementById('result').classList.add('visible');
+  }
+
+  function showError(msg) {
+    document.getElementById('result-content').innerHTML = `
+      <div style="color:var(--red);font-weight:600">⚠ Erreur d'analyse</div>
+      <div style="color:var(--muted);font-size:13px;margin-top:8px">${msg}</div>`;
+    document.getElementById('result').classList.add('visible');
+    document.getElementById('scan-actions').style.display = 'block';
+  }
+
+  // ── Reset ─────────────────────────────────────────────
+  function resetScan() {
+    state.rectoB64 = null;
+    state.versoB64 = null;
+    ['recto','verso'].forEach(s => {
+      const slot = document.getElementById(`slot-${s}`);
+      slot.querySelector('img')?.remove();
+      slot.classList.remove('done-slot','active-slot');
+    });
+    document.getElementById('scan-actions').style.display = 'block';
+    document.getElementById('loader').classList.remove('visible');
+    document.getElementById('result').classList.remove('visible');
+    updateScanState();
+  }
+
+  // ── Storage ───────────────────────────────────────────
+  const KEY = 'pokescan_cards';
+  function loadCards() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; } }
+  function saveCard(card) {
+    const cards = loadCards();
+    cards.push({ ...card, id: Date.now(), scanned_at: new Date().toISOString() });
+    localStorage.setItem(KEY, JSON.stringify(cards));
+  }
+  function deleteCard(id) {
+    localStorage.setItem(KEY, JSON.stringify(loadCards().filter(c => c.id !== id)));
+    renderCollection();
+  }
+
+  // ── Helpers ───────────────────────────────────────────
+  function fmt(val) {
+    if (val == null) return '—';
+    return Number(val).toLocaleString('fr-FR', { style:'currency', currency:'EUR', minimumFractionDigits: 2 });
+  }
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+  }
+
+  // ── Collection render ──────────────────────────────────
+  function renderCollection() {
+    const cards = loadCards().sort((a, b) => {
+      const pa = a.price?.avg_sell ?? a.price?.trend ?? -1;
+      const pb = b.price?.avg_sell ?? b.price?.trend ?? -1;
+      return pb - pa;
+    });
+
+    if (!cards.length) {
+      document.getElementById('collection-content').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🃏</div>
+          <div class="empty-text">Aucune carte scannée.<br>Scanner ta première carte !</div>
+        </div>`;
+      return;
+    }
+
+    const total = cards.reduce((s, c) => s + (c.price?.avg_sell || c.price?.trend || 0), 0);
+    const known = cards.filter(c => c.price?.avg_sell || c.price?.trend).length;
+
+    const items = cards.map(c => `
+      <div class="card-item">
+        <div class="card-info">
+          <div class="card-name">${c.name_fr || c.name_en || '?'}</div>
+          <div class="card-meta">${c.set_name || '?'} · ${c.card_number || '?'} · ${fmtDate(c.scanned_at)}</div>
+          <div class="card-badges">
+            <span class="badge ${c.is_real ? 'badge-real' : 'badge-fake'}">${c.is_real ? '✓ Vraie' : '✗ Fausse'}</span>
+            <span class="badge badge-${c.rarity || 'common'}">${c.rarity_fr || '?'}</span>
+          </div>
+        </div>
+        <div class="card-price-col">
+          ${c.price?.avg_sell
+            ? `<div class="card-price-val">${fmt(c.price.avg_sell)}</div>`
+            : `<div class="card-price-na">Prix inconnu</div>`}
+          <button class="card-delete" onclick="deleteCard(${c.id})" title="Supprimer">×</button>
+        </div>
+      </div>`).join('');
+
+    document.getElementById('collection-content').innerHTML = `
+      <div class="collection-summary">
+        <div>
+          <div class="summary-label">Cartes scannées</div>
+          <div class="summary-count">${cards.length}</div>
+        </div>
+        <div class="summary-value">
+          <div class="summary-label">Valeur estimée${known < cards.length ? ` (${known}/${cards.length})` : ''}</div>
+          <div class="summary-total">${fmt(total)}</div>
+        </div>
+      </div>
+      <div class="collection-list">${items}</div>`;
+  }
+
+  // ── Init ──────────────────────────────────────────────
+  updateScanState();
+</script>
+</body>
+</html>

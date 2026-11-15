@@ -1,0 +1,10 @@
+{
+  "name": "PokéScan",
+  "short_name": "PokéScan",
+  "description": "Scanner et évaluer les cartes Pokémon",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#FFCB05",
+  "icons": []
+}
